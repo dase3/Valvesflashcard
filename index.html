@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flash Cards · English & 中文</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Noto+Sans+Thai:wght@400;600&family=Noto+Sans+SC:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>🌸 Flash Cards</h1>
+    <p class="subtitle">จำคำศัพท์ภาษาอังกฤษและภาษาจีน</p>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-deck="english" role="tab">English</button>
+    <button class="tab" data-deck="chinese" role="tab">中文</button>
+  </nav>
+
+  <main>
+    <div class="progress-wrap">
+      <span id="counter">0 / 0</span>
+      <div class="progress"><div id="progress-bar"></div></div>
+    </div>
+
+    <!-- Empty state (shown when a deck has no words yet) -->
+    <div id="empty" class="empty hidden">
+      <div class="empty-icon">🎀</div>
+      <h2>No words yet</h2>
+      <p>ยังไม่มีคำศัพท์ในชุดนี้<br />Add words in <code>words.js</code> and refresh the page.</p>
+    </div>
+
+    <!-- Flash card -->
+    <div id="scene" class="scene">
+      <div id="card" class="card" tabindex="0" aria-label="Flash card, click to flip">
+        <div class="face front">
+          <span class="hint">tap to flip</span>
+          <div id="front-word" class="word"></div>
+          <div id="front-pinyin" class="pinyin"></div>
+        </div>
+        <div class="face back">
+          <span id="back-pos" class="pos"></span>
+          <div id="back-thai" class="thai"></div>
+          <div class="divider"></div>
+          <div class="label">Meaning · ความหมาย</div>
+          <div id="back-meaning" class="meaning"></div>
+          <div id="back-example" class="example"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="controls" class="controls">
+      <button id="prev" class="btn" aria-label="Previous">‹ Prev</button>
+      <button id="shuffle" class="btn btn-soft" aria-label="Shuffle">🔀 Shuffle</button>
+      <button id="next" class="btn" aria-label="Next">Next ›</button>
+    </div>
+
+    <p class="keys">Space = flip · ← → = previous / next</p>
+  </main>
+
+  <script src="words.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
