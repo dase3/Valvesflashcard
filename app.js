@@ -53,6 +53,7 @@
   filter = P.filters[current] || "all";
   const keyOf = (w) => (w.word || "") + "|" + (w.thai || "").slice(0, 30);
   const placeKey = () => `${current}|${filter}|${mode}`;
+  let answers = {}; // quiz answers this round: word key -> { opts, answer, pick }
   let saveTimer;
   let ready = false; // don't save until the saved place has been loaded
   function saveProgress() {
@@ -60,7 +61,7 @@
     P.current = current;
     P.mode = mode;
     P.filters[current] = filter;
-    P.places[placeKey()] = { order: deck.map(keyOf), index };
+    P.places[placeKey()] = { order: deck.map(keyOf), index, answers };
     P.score = { right: score.right, wrong: score.wrong, streak: score.streak };
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
@@ -86,10 +87,12 @@
       byKey.forEach((arr) => rest.push(...arr));
       deck.push(...(mode === "quiz" ? shuffleArray(rest) : rest));
       index = Math.min(place.index || 0, Math.max(0, deck.length - 1));
+      answers = place.answers || {};
     } else {
       deck = list;
       if (mode === "quiz") shuffleArray(deck);
       index = 0;
+      answers = {};
     }
   }
 
@@ -210,7 +213,7 @@
   }
   function next() {
     if (index < deck.length - 1) { index++; render(); }
-    else if (mode === "quiz" && deck.length > 1) { shuffleArray(deck); index = 0; render(); toast("Round complete! 🎉 Shuffled for a new round"); }
+    else if (mode === "quiz" && deck.length > 1) { shuffleArray(deck); answers = {}; index = 0; render(); toast("Round complete! 🎉 Shuffled for a new round"); }
   }
 
   // ---------- Quiz game ----------
@@ -220,8 +223,54 @@
     return s;
   };
 
+  let currentChoice = null; // options shown for the current card
+
+  function makeButtons(options, answer) {
+    const frag = document.createDocumentFragment();
+    options.forEach((txt, i) => {
+      const b = document.createElement("button");
+      b.className = "choice";
+      b.innerHTML = `<span class="key">${i + 1}</span>`;
+      b.appendChild(document.createTextNode(txt));
+      b.dataset.correct = txt === answer ? "1" : "";
+      b.dataset.token = cardToken;
+      b.addEventListener("click", () => choose(b));
+      frag.appendChild(b);
+    });
+    $("choices").replaceChildren(frag); // old and new answers swapped at once, so the page height never drops
+  }
+
+  function markChoices(pickedBtn) {
+    $("choices").querySelectorAll(".choice").forEach((b) => {
+      b.disabled = true;
+      if (b.dataset.correct === "1") b.classList.add("correct");
+      else if (b === pickedBtn) b.classList.add("wrong");
+      else b.classList.add("dim");
+    });
+  }
+
+  const resultFor = (ok) => ({
+    text: ok ? "✅ ถูกต้อง! Correct!" : "❌ ยังไม่ถูก — the answer is:",
+    cls: "result " + (ok ? "ok" : "no"),
+  });
+
   function buildChoices(w) {
-    const box = $("choices");
+    const rec = answers[keyOf(w)];
+    if (rec && Array.isArray(rec.opts)) {
+      // already answered this round: show it locked, exactly as it was
+      currentChoice = rec;
+      makeButtons(rec.opts, rec.answer);
+      const picked = [...$("choices").querySelectorAll(".choice")].find((b) => b.textContent.slice(1) === rec.pick);
+      markChoices(picked);
+      answered = true;
+      result = resultFor(rec.pick === rec.answer);
+      $("next").disabled = false;
+      const myToken = cardToken;
+      flipTimer = setTimeout(() => {
+        if (myToken === cardToken) card.classList.add("flipped");
+      }, Math.max(0, backReadyAt - Date.now()) + 30);
+      return;
+    }
     const answer = short(w.thai);
     const used = new Set([answer]);
     const picks = [];
@@ -238,18 +287,8 @@
     tryPool(samePos.length >= 12 ? samePos : pool);
     if (picks.length < 3) tryPool(allWords());
     const options = shuffleArray([answer, ...picks]);
-    const frag = document.createDocumentFragment();
-    options.forEach((txt, i) => {
-      const b = document.createElement("button");
-      b.className = "choice";
-      b.innerHTML = `<span class="key">${i + 1}</span>`;
-      b.appendChild(document.createTextNode(txt));
-      b.dataset.correct = txt === answer ? "1" : "";
-      b.dataset.token = cardToken;
-      b.addEventListener("click", () => choose(b));
-      frag.appendChild(b);
-    });
-    box.replaceChildren(frag); // old and new answers swapped at once, so the page height never drops
+    currentChoice = { opts: options, answer };
+    makeButtons(options, answer);
   }
 
   function choose(btn) {
@@ -259,12 +298,11 @@
     if (Date.now() - shownAt < 250) return; // too soon after the card appeared: probably a stray tap
     answered = true;
     const ok = btn.dataset.correct === "1";
-    $("choices").querySelectorAll(".choice").forEach((b) => {
-      b.disabled = true;
-      if (b.dataset.correct === "1") b.classList.add("correct");
-      else if (b === btn) b.classList.add("wrong");
-      else b.classList.add("dim");
-    });
+    markChoices(btn);
+    // remember this answer so going back can't score it again
+    if (currentChoice && deck[index]) {
+      answers[keyOf(deck[index])] = { opts: currentChoice.opts, answer: currentChoice.answer, pick: btn.textContent.slice(1) };
+    }
     if (ok) {
       score.right++; score.streak++;
       if (score.streak > score.best) {
@@ -275,7 +313,7 @@
       score.wrong++; score.streak = 0;
     }
     updateScore(ok);
-    result = { text: ok ? "✅ ถูกต้อง! Correct!" : "❌ ยังไม่ถูก — the answer is:", cls: "result " + (ok ? "ok" : "no") };
+    result = resultFor(ok);
     if (Date.now() >= backReadyAt) {
       $("back-result").textContent = result.text;
       $("back-result").className = result.cls;
