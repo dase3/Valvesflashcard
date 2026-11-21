@@ -648,8 +648,14 @@
     $("reset-score").textContent = "↺ Reset";
     score.right = score.wrong = score.streak = score.best = 0;
     try { localStorage.setItem("flashcards.best", 0); } catch (e) {}
+    // also unlock every answered question (in all languages / word sets) and start a fresh round
+    answers = {};
+    Object.values(P.places).forEach((pl) => { if (pl) pl.answers = {}; });
+    if (mode === "quiz") shuffleArray(deck);
+    index = 0;
     updateScore(false);
-    toast("Score reset");
+    render();
+    toast("Score and answers reset — new round!");
   });
   let confirmReset = false;
 
