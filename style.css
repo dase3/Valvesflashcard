@@ -360,3 +360,9 @@ button, .card, .choice {
   -webkit-user-select: none;
   user-select: none;
 }
+
+.reset {
+  border: none; background: none; color: var(--muted); font: inherit; font-size: 0.85rem;
+  font-weight: 700; cursor: pointer; padding: 0 4px; text-decoration: underline;
+}
+.reset:hover { color: var(--pink-600); }

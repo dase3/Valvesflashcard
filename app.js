@@ -40,6 +40,33 @@
   const score = { right: 0, wrong: 0, streak: 0, best: 0 };
   try { score.best = +localStorage.getItem("flashcards.best") || 0; } catch (e) {}
   const MY = "My words";
+
+  // ---------- Saved progress ----------
+  const PROGRESS_KEY = "flashcards.progress.v1";
+  let P = {};
+  try { P = JSON.parse(localStorage.getItem(PROGRESS_KEY)) || {}; } catch (e) { P = {}; }
+  P.filters = P.filters || {};
+  P.places = P.places || {};
+  if (P.score) Object.assign(score, P.score, { best: score.best });
+  if (P.current === "english" || P.current === "chinese") current = P.current;
+  if (P.mode === "quiz" || P.mode === "cards") mode = P.mode;
+  filter = P.filters[current] || "all";
+  const keyOf = (w) => (w.word || "") + "|" + (w.thai || "").slice(0, 30);
+  const placeKey = () => `${current}|${filter}|${mode}`;
+  let saveTimer;
+  let ready = false; // don't save until the saved place has been loaded
+  function saveProgress() {
+    if (!ready) return;
+    P.current = current;
+    P.mode = mode;
+    P.filters[current] = filter;
+    P.places[placeKey()] = { order: deck.map(keyOf), index };
+    P.score = { right: score.right, wrong: score.wrong, streak: score.streak };
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(P)); } catch (e) { /* storage full or blocked */ }
+    }, 150);
+  }
   const tagOf = (w) => w.tag || (w.builtIn ? "Other" : MY);
 
   function allWords() {
@@ -47,8 +74,23 @@
   }
 
   function buildDeck() {
-    deck = allWords().filter((w) => filter === "all" || tagOf(w) === filter);
-    if (mode === "quiz") shuffleArray(deck);
+    const list = allWords().filter((w) => filter === "all" || tagOf(w) === filter);
+    const place = P.places[placeKey()];
+    if (place && Array.isArray(place.order)) {
+      // put the words back in the order you were using last time
+      const byKey = new Map();
+      list.forEach((w) => { const k = keyOf(w); if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(w); });
+      deck = [];
+      place.order.forEach((k) => { const arr = byKey.get(k); if (arr && arr.length) deck.push(arr.shift()); });
+      const rest = [];
+      byKey.forEach((arr) => rest.push(...arr));
+      deck.push(...(mode === "quiz" ? shuffleArray(rest) : rest));
+      index = Math.min(place.index || 0, Math.max(0, deck.length - 1));
+    } else {
+      deck = list;
+      if (mode === "quiz") shuffleArray(deck);
+      index = 0;
+    }
   }
 
   function shuffleArray(arr) {
@@ -124,6 +166,7 @@
 
     $("counter").textContent = `${index + 1} / ${total}`;
     $("progress-bar").style.width = `${((index + 1) / total) * 100}%`;
+    saveProgress();
   }
 
   function flip() {
@@ -205,6 +248,7 @@
     $("s-wrong").textContent = score.wrong;
     $("s-streak").textContent = score.streak;
     $("s-best").textContent = score.best;
+    saveProgress();
     const bar = $("scorebar");
     if (ok) { bar.classList.remove("bump"); void bar.offsetWidth; bar.classList.add("bump"); }
   }
@@ -238,7 +282,7 @@
     current = name;
     document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.deck === name));
     index = 0;
-    filter = "all";
+    filter = P.filters[name] || "all";
     updateFilter();
     buildDeck();
     render();
@@ -246,6 +290,7 @@
 
   $("filter").addEventListener("change", (e) => {
     filter = e.target.value;
+    P.filters[current] = filter;
     index = 0;
     buildDeck();
     render();
@@ -508,7 +553,28 @@
     lastTap = now;
   }, { passive: false });
 
+  // reset the score
+  $("reset-score").addEventListener("click", () => {
+    if (!confirmReset) {
+      confirmReset = true;
+      $("reset-score").textContent = "Sure? tap again";
+      setTimeout(() => { confirmReset = false; $("reset-score").textContent = "↺ Reset"; }, 2500);
+      return;
+    }
+    confirmReset = false;
+    $("reset-score").textContent = "↺ Reset";
+    score.right = score.wrong = score.streak = score.best = 0;
+    try { localStorage.setItem("flashcards.best", 0); } catch (e) {}
+    updateScore(false);
+    toast("Score reset");
+  });
+  let confirmReset = false;
+
   // ---------- Start ----------
+  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.deck === current));
+  updateScore(false);
   updateFilter();
   setMode(mode === "cards" ? "cards" : "quiz");
+  ready = true;
+  saveProgress();
 })();
