@@ -20,6 +20,11 @@
     <button class="tab" data-deck="chinese" role="tab">中文</button>
   </nav>
 
+  <div class="toolbar">
+    <button id="open-add" class="btn">＋ Add word</button>
+    <button id="open-list" class="btn btn-soft">📋 Word list</button>
+  </div>
+
   <main>
     <div class="progress-wrap">
       <span id="counter">0 / 0</span>
@@ -30,7 +35,7 @@
     <div id="empty" class="empty hidden">
       <div class="empty-icon">🎀</div>
       <h2>No words yet</h2>
-      <p>ยังไม่มีคำศัพท์ในชุดนี้<br />Add words in <code>words.js</code> and refresh the page.</p>
+      <p>ยังไม่มีคำศัพท์ในชุดนี้<br />Click <strong>＋ Add word</strong> to make your first card.</p>
     </div>
 
     <!-- Flash card -->
@@ -60,6 +65,79 @@
 
     <p class="keys">Space = flip · ← → = previous / next</p>
   </main>
+
+  <!-- Add / edit word -->
+  <dialog id="add-dialog" class="modal">
+    <form id="add-form" method="dialog">
+      <h2 id="form-title">Add a word · เพิ่มคำศัพท์</h2>
+
+      <label>Deck
+        <select id="f-deck">
+          <option value="english">English</option>
+          <option value="chinese">中文 Chinese</option>
+        </select>
+      </label>
+
+      <label>Word <span class="req">*</span>
+        <input id="f-word" required autocomplete="off" />
+      </label>
+
+      <label id="pinyin-row">Pinyin
+        <input id="f-pinyin" autocomplete="off" placeholder="e.g. nǐ hǎo" />
+      </label>
+
+      <label>Part of speech
+        <input id="f-pos" list="pos-options" autocomplete="off" placeholder="e.g. noun" />
+        <datalist id="pos-options">
+          <option value="noun"></option>
+          <option value="verb"></option>
+          <option value="adjective"></option>
+          <option value="adverb"></option>
+          <option value="pronoun"></option>
+          <option value="preposition"></option>
+          <option value="conjunction"></option>
+          <option value="interjection"></option>
+          <option value="measure word"></option>
+          <option value="phrase"></option>
+        </datalist>
+      </label>
+
+      <label>Thai translation <span class="req">*</span>
+        <input id="f-thai" required autocomplete="off" />
+      </label>
+
+      <label>Meaning
+        <textarea id="f-meaning" rows="2"></textarea>
+      </label>
+
+      <label>Example sentence
+        <input id="f-example" autocomplete="off" />
+      </label>
+
+      <div class="modal-actions">
+        <button type="button" id="cancel-add" class="btn btn-soft">Cancel</button>
+        <button type="submit" id="save-word" class="btn">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Word list -->
+  <dialog id="list-dialog" class="modal modal-wide">
+    <div class="list-head">
+      <h2 id="list-title">Word list</h2>
+      <button type="button" id="close-list" class="icon-btn" aria-label="Close">✕</button>
+    </div>
+    <p class="note">Words you add here are saved in <strong>this browser only</strong>. Use Backup to move them to another device, or “Copy for words.js” to put them on the website for everyone.</p>
+    <ul id="word-list" class="word-list"></ul>
+    <div class="list-actions">
+      <button type="button" id="export" class="btn btn-soft">⬇ Backup</button>
+      <button type="button" id="import" class="btn btn-soft">⬆ Restore</button>
+      <button type="button" id="copy-code" class="btn btn-soft">📄 Copy for words.js</button>
+      <input type="file" id="import-file" accept=".json,application/json" hidden />
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast"></div>
 
   <script src="words.js"></script>
   <script src="app.js"></script>
