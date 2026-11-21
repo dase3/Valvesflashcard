@@ -128,7 +128,9 @@
   let backReadyAt = 0;      // time when the back of the current card shows the right word
   let result = { text: "", cls: "result" };
 
+  let shownAt = 0;
   function render() {
+    shownAt = Date.now();
     cardToken++;
     const myToken = cardToken;
     clearTimeout(flipTimer);
@@ -227,6 +229,7 @@
       b.innerHTML = `<span class="key">${i + 1}</span>`;
       b.appendChild(document.createTextNode(txt));
       b.dataset.correct = txt === answer ? "1" : "";
+      b.dataset.token = cardToken;
       b.addEventListener("click", () => choose(b));
       box.appendChild(b);
     });
@@ -234,6 +237,9 @@
 
   function choose(btn) {
     if (answered) return;
+    // ignore taps that belong to a card that's already gone (e.g. two fingers at once)
+    if (!btn.isConnected || +btn.dataset.token !== cardToken) return;
+    if (Date.now() - shownAt < 250) return; // too soon after the card appeared: probably a stray tap
     answered = true;
     const ok = btn.dataset.correct === "1";
     $("choices").querySelectorAll(".choice").forEach((b) => {
@@ -569,7 +575,7 @@
       const el = e.target.closest("button, .card, select, input, textarea, label");
       if (!el || !el.matches("select, input, textarea")) {
         e.preventDefault();
-        if (el) el.click();
+        if (el && el.isConnected) el.click();
       }
     }
     lastTap = now;
