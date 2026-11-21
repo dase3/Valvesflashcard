@@ -33,9 +33,32 @@
   let current = "english";
   let deck = [];
   let index = 0;
+  let filter = "all";
+  const MY = "My words";
+  const tagOf = (w) => w.tag || (w.builtIn ? "Other" : MY);
+
+  function allWords() {
+    return builtIn[current].concat(custom[current]);
+  }
 
   function buildDeck() {
-    deck = builtIn[current].concat(custom[current]);
+    deck = allWords().filter((w) => filter === "all" || tagOf(w) === filter);
+  }
+
+  function updateFilter() {
+    const sel = $("filter");
+    const counts = {};
+    allWords().forEach((w) => { counts[tagOf(w)] = (counts[tagOf(w)] || 0) + 1; });
+    if (filter !== "all" && !counts[filter]) filter = "all";
+    sel.innerHTML = "";
+    const add = (value, label) => {
+      const o = document.createElement("option");
+      o.value = value; o.textContent = label;
+      sel.appendChild(o);
+    };
+    add("all", `All words (${allWords().length})`);
+    Object.keys(counts).forEach((t) => add(t, `${t} (${counts[t]})`));
+    sel.value = filter;
   }
 
   const card = $("card");
@@ -66,12 +89,16 @@
     $("next").disabled = index === total - 1;
 
     const w = deck[index];
+    $("front-tag").textContent = tagOf(w) === "Other" ? "" : tagOf(w);
     $("front-word").textContent = w.word || "";
     $("front-pinyin").textContent = w.pinyin || "";
     // Swap the back after the card turns back over, so the answer isn't revealed early
     setTimeout(() => {
       $("back-pos").textContent = w.pos || "";
-      $("back-thai").textContent = w.thai || "";
+      const th = w.thai || "";
+      $("back-thai").textContent = th;
+      $("back-thai").className = "thai" + (th.length > 70 ? " long" : th.length > 28 ? " medium" : "");
+      document.querySelector(".back").scrollTop = 0;
       $("back-meaning").textContent = w.meaning || "";
       $("back-example").textContent = w.example || "";
     }, 150);
@@ -96,9 +123,18 @@
     current = name;
     document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.deck === name));
     index = 0;
+    filter = "all";
+    updateFilter();
     buildDeck();
     render();
   }
+
+  $("filter").addEventListener("change", (e) => {
+    filter = e.target.value;
+    index = 0;
+    buildDeck();
+    render();
+  });
 
   card.addEventListener("click", flip);
   $("next").addEventListener("click", next);
@@ -176,6 +212,7 @@
       custom[deckName].push({ ...entry, id: newId() });
     }
     if (!saveCustom()) return;
+    updateFilter();
 
     const wasEditing = !!editing;
     addDialog.close();
@@ -187,7 +224,9 @@
       toast("Saved ✓");
     } else {
       // Jump to the new card
-      if (deckName !== current) switchDeck(deckName); else buildDeck();
+      if (deckName !== current) switchDeck(deckName);
+      if (filter !== "all" && filter !== MY) { filter = "all"; updateFilter(); }
+      buildDeck();
       index = deck.length - 1;
       render();
       if ($("list-dialog").open) renderList();
@@ -206,7 +245,7 @@
     ul.innerHTML = "";
     $("list-title").textContent = current === "chinese" ? "中文 word list" : "English word list";
 
-    const all = builtIn[current].concat(custom[current]);
+    const all = allWords().filter((w) => filter === "all" || tagOf(w) === filter);
     if (all.length === 0) {
       const li = document.createElement("li");
       li.className = "w-empty";
@@ -231,7 +270,7 @@
       if (w.builtIn) {
         const tag = document.createElement("div");
         tag.className = "w-tag";
-        tag.textContent = "from words.js";
+        tag.textContent = w.tag ? `${w.tag} · words.js` : "from words.js";
         main.appendChild(tag);
       }
       li.appendChild(main);
@@ -249,6 +288,7 @@
           if (del.dataset.confirm) {
             custom[current] = custom[current].filter((x) => x.id !== w.id);
             saveCustom();
+            updateFilter();
             buildDeck();
             render();
             renderList();
@@ -298,6 +338,7 @@
           });
         });
         saveCustom();
+        updateFilter();
         buildDeck();
         render();
         renderList();
@@ -331,6 +372,7 @@
   });
 
   // ---------- Start ----------
+  updateFilter();
   buildDeck();
   render();
 })();

@@ -266,3 +266,26 @@ main { width: 100%; max-width: 520px; display: flex; flex-direction: column; ali
   opacity: 0; pointer-events: none; transition: opacity 0.25s, transform 0.25s;
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* Source label + filter */
+.tag {
+  position: absolute; top: 16px; left: 16px;
+  background: var(--pink-50); color: var(--pink-500);
+  font-size: 0.75rem; font-weight: 700; padding: 4px 10px; border-radius: 999px;
+}
+.tag:empty { display: none; }
+.filter {
+  font: inherit; font-weight: 700; font-size: 0.95rem; color: var(--pink-600);
+  background: var(--white); border: none; border-radius: 999px; padding: 0 16px;
+  box-shadow: 0 6px 16px rgba(240, 98, 143, 0.15); cursor: pointer; outline: none;
+}
+@media (max-width: 480px) {
+  .toolbar { flex-wrap: wrap; justify-content: center; }
+  .filter { height: 42px; }
+}
+
+/* Long translations */
+.back { justify-content: flex-start; padding-top: 52px; }
+.back-inner { margin: auto 0; width: 100%; display: flex; flex-direction: column; align-items: center; }
+.thai.medium { font-size: 1.35rem; line-height: 1.5; }
+.thai.long { font-size: 1.1rem; line-height: 1.55; font-weight: 500; }

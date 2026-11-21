@@ -23,6 +23,7 @@
   <div class="toolbar">
     <button id="open-add" class="btn">＋ Add word</button>
     <button id="open-list" class="btn btn-soft">📋 Word list</button>
+    <select id="filter" class="filter" aria-label="Choose word set"></select>
   </div>
 
   <main>
@@ -42,17 +43,20 @@
     <div id="scene" class="scene">
       <div id="card" class="card" tabindex="0" aria-label="Flash card, click to flip">
         <div class="face front">
+          <span id="front-tag" class="tag"></span>
           <span class="hint">tap to flip</span>
           <div id="front-word" class="word"></div>
           <div id="front-pinyin" class="pinyin"></div>
         </div>
         <div class="face back">
           <span id="back-pos" class="pos"></span>
-          <div id="back-thai" class="thai"></div>
-          <div class="divider"></div>
-          <div class="label">Meaning · ความหมาย</div>
-          <div id="back-meaning" class="meaning"></div>
-          <div id="back-example" class="example"></div>
+          <div class="back-inner">
+            <div id="back-thai" class="thai"></div>
+            <div class="divider"></div>
+            <div class="label">Meaning · ความหมาย</div>
+            <div id="back-meaning" class="meaning"></div>
+            <div id="back-example" class="example"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -78,7 +82,7 @@
         </select>
       </label>
 
-      <label>Word <span class="req">*</span>
+      <label><span>Word <span class="req">*</span></span>
         <input id="f-word" required autocomplete="off" />
       </label>
 
@@ -102,7 +106,7 @@
         </datalist>
       </label>
 
-      <label>Thai translation <span class="req">*</span>
+      <label><span>Thai translation <span class="req">*</span></span>
         <input id="f-thai" required autocomplete="off" />
       </label>
 
