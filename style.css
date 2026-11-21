@@ -350,3 +350,13 @@ main { width: 100%; max-width: 520px; display: flex; flex-direction: column; ali
 @media (max-width: 480px) {
   .quiz .scene { aspect-ratio: 5 / 4; }
 }
+
+/* Stop double-tap zoom on phones when tapping buttons quickly (pinch zoom still works) */
+html, body, button, select, .card, .choice, .tab, .mode {
+  touch-action: manipulation;
+}
+button, .card, .choice {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
