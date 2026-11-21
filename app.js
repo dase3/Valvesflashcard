@@ -129,7 +129,20 @@
   let result = { text: "", cls: "result" };
 
   let shownAt = 0;
+
+  // Keep the page where it is when the card changes (iPhone Safari sometimes jumps to the top)
+  function keepScroll(y) {
+    const fix = () => { if (Math.abs(window.scrollY - y) > 20) window.scrollTo(0, y); };
+    fix();
+    requestAnimationFrame(() => { fix(); requestAnimationFrame(fix); });
+    [60, 150, 300, 500].forEach((t) => setTimeout(fix, t));
+  }
+
   function render() {
+    const scrollY0 = window.scrollY;
+    if (document.activeElement && document.activeElement !== document.body) {
+      try { document.activeElement.blur({ preventScroll: true }); } catch (e) { document.activeElement.blur(); }
+    }
     shownAt = Date.now();
     cardToken++;
     const myToken = cardToken;
@@ -174,7 +187,8 @@
       const th = w.thai || "";
       $("back-thai").textContent = th;
       $("back-thai").className = "thai" + (th.length > 70 ? " long" : th.length > 28 ? " medium" : "");
-      document.querySelector(".back").scrollTop = 0;
+      const back = document.querySelector(".back");
+      if (back.scrollTop) back.scrollTop = 0;
       $("back-meaning").textContent = w.meaning || "";
       $("back-example").textContent = w.example || "";
       $("back-result").textContent = result.text;
@@ -186,6 +200,7 @@
     $("counter").textContent = `${index + 1} / ${total}`;
     $("progress-bar").style.width = `${((index + 1) / total) * 100}%`;
     saveProgress();
+    if (ready) keepScroll(scrollY0);
   }
 
   function flip() {
