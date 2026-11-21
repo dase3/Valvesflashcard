@@ -492,6 +492,22 @@
     }
   });
 
+  // ---------- Stop double-tap zoom on phones ----------
+  // iPhone Safari can zoom when a button is tapped twice quickly, even with CSS rules.
+  // If a second tap comes within 350ms, cancel the zoom and treat it as a normal tap.
+  let lastTap = 0;
+  document.addEventListener("touchend", (e) => {
+    const now = Date.now();
+    if (now - lastTap < 350) {
+      const el = e.target.closest("button, .card, select, input, textarea, label");
+      if (!el || !el.matches("select, input, textarea")) {
+        e.preventDefault();
+        if (el) el.click();
+      }
+    }
+    lastTap = now;
+  }, { passive: false });
+
   // ---------- Start ----------
   updateFilter();
   setMode(mode === "cards" ? "cards" : "quiz");
