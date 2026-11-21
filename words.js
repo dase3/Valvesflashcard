@@ -23,11 +23,11 @@
 */
 
 const ENGLISH_WORDS = [
-  // Add English words below this line
+  { word: "apple", pos: "noun", thai: "แอปเปิล", meaning: "A round fruit with red or green skin.", example: "I eat an apple every day." },
 
 ];
 
 const CHINESE_WORDS = [
-  // Add Chinese words below this line
+  { word: "你好", pinyin: "nǐ hǎo", pos: "interjection", thai: "สวัสดี", meaning: "Hello; a common greeting.", example: "你好，我叫小明。" },
 
 ];
