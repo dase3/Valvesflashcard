@@ -34,6 +34,11 @@
   let deck = [];
   let index = 0;
   let filter = "all";
+  let mode = "quiz";
+  try { mode = localStorage.getItem("flashcards.mode") || "quiz"; } catch (e) {}
+  let answered = false;
+  const score = { right: 0, wrong: 0, streak: 0, best: 0 };
+  try { score.best = +localStorage.getItem("flashcards.best") || 0; } catch (e) {}
   const MY = "My words";
   const tagOf = (w) => w.tag || (w.builtIn ? "Other" : MY);
 
@@ -43,6 +48,15 @@
 
   function buildDeck() {
     deck = allWords().filter((w) => filter === "all" || tagOf(w) === filter);
+    if (mode === "quiz") shuffleArray(deck);
+  }
+
+  function shuffleArray(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
   }
 
   function updateFilter() {
@@ -72,6 +86,9 @@
 
     scene.classList.toggle("chinese", current === "chinese");
     card.classList.remove("flipped");
+    answered = false;
+    $("choices").innerHTML = "";
+    $("next").classList.remove("pulse");
 
     if (total === 0) {
       scene.classList.add("hidden");
@@ -86,7 +103,7 @@
     empty.classList.add("hidden");
     $("shuffle").disabled = total < 2;
     $("prev").disabled = index === 0;
-    $("next").disabled = index === total - 1;
+    $("next").disabled = mode === "quiz" ? true : index === total - 1;
 
     const w = deck[index];
     $("front-tag").textContent = tagOf(w) === "Other" ? "" : tagOf(w);
@@ -101,14 +118,112 @@
       document.querySelector(".back").scrollTop = 0;
       $("back-meaning").textContent = w.meaning || "";
       $("back-example").textContent = w.example || "";
+      $("back-result").textContent = "";
     }, 150);
+    if (mode === "quiz") buildChoices(w);
 
     $("counter").textContent = `${index + 1} / ${total}`;
     $("progress-bar").style.width = `${((index + 1) / total) * 100}%`;
   }
 
-  function flip() { if (deck.length) card.classList.toggle("flipped"); }
-  function next() { if (index < deck.length - 1) { index++; render(); } }
+  function flip() {
+    if (!deck.length) return;
+    if (mode === "quiz" && !answered) return; // pick an answer first
+    card.classList.toggle("flipped");
+  }
+  function next() {
+    if (index < deck.length - 1) { index++; render(); }
+    else if (mode === "quiz" && deck.length > 1) { shuffleArray(deck); index = 0; render(); toast("Round complete! 🎉 Shuffled for a new round"); }
+  }
+
+  // ---------- Quiz game ----------
+  const short = (t) => {
+    let s = (t || "").split(" / ")[0].trim();
+    if (s.length > 48) s = s.slice(0, 48).replace(/[,\s][^,\s]*$/, "") + "…";
+    return s;
+  };
+
+  function buildChoices(w) {
+    const box = $("choices");
+    const answer = short(w.thai);
+    const used = new Set([answer]);
+    const picks = [];
+    const tryPool = (pool) => {
+      for (const o of shuffleArray(pool.slice())) {
+        if (picks.length >= 3) break;
+        const s = short(o.thai);
+        if (o === w || !s || used.has(s)) continue;
+        used.add(s); picks.push(s);
+      }
+    };
+    const pool = deck.length >= 8 ? deck : allWords();
+    const samePos = pool.filter((o) => o.pos && w.pos && o.pos.split(",")[0] === w.pos.split(",")[0]);
+    tryPool(samePos.length >= 12 ? samePos : pool);
+    if (picks.length < 3) tryPool(allWords());
+    const options = shuffleArray([answer, ...picks]);
+    options.forEach((txt, i) => {
+      const b = document.createElement("button");
+      b.className = "choice";
+      b.innerHTML = `<span class="key">${i + 1}</span>`;
+      b.appendChild(document.createTextNode(txt));
+      b.dataset.correct = txt === answer ? "1" : "";
+      b.addEventListener("click", () => choose(b));
+      box.appendChild(b);
+    });
+  }
+
+  function choose(btn) {
+    if (answered) return;
+    answered = true;
+    const ok = btn.dataset.correct === "1";
+    $("choices").querySelectorAll(".choice").forEach((b) => {
+      b.disabled = true;
+      if (b.dataset.correct === "1") b.classList.add("correct");
+      else if (b === btn) b.classList.add("wrong");
+      else b.classList.add("dim");
+    });
+    if (ok) {
+      score.right++; score.streak++;
+      if (score.streak > score.best) {
+        score.best = score.streak;
+        try { localStorage.setItem("flashcards.best", score.best); } catch (e) {}
+      }
+    } else {
+      score.wrong++; score.streak = 0;
+    }
+    updateScore(ok);
+    const r = $("back-result");
+    r.textContent = ok ? "✅ ถูกต้อง! Correct!" : "❌ ยังไม่ถูก — the answer is:";
+    r.className = "result " + (ok ? "ok" : "no");
+    setTimeout(() => card.classList.add("flipped"), ok ? 350 : 650);
+    $("next").disabled = false;
+    $("next").classList.add("pulse");
+  }
+
+  function updateScore(ok) {
+    $("s-right").textContent = score.right;
+    $("s-wrong").textContent = score.wrong;
+    $("s-streak").textContent = score.streak;
+    $("s-best").textContent = score.best;
+    const bar = $("scorebar");
+    if (ok) { bar.classList.remove("bump"); void bar.offsetWidth; bar.classList.add("bump"); }
+  }
+
+  function setMode(m) {
+    mode = m;
+    try { localStorage.setItem("flashcards.mode", m); } catch (e) {}
+    document.querySelectorAll(".mode").forEach((b) => b.classList.toggle("active", b.dataset.mode === m));
+    document.body.classList.toggle("quiz", m === "quiz");
+    $("scorebar").classList.toggle("hidden", m !== "quiz");
+    $("choices").classList.toggle("hidden", m !== "quiz");
+    $("keys").textContent = m === "quiz"
+      ? "1–4 = choose answer · Enter / → = next word"
+      : "Space = flip · ← → = previous / next";
+    index = 0;
+    buildDeck();
+    render();
+  }
+  document.querySelectorAll(".mode").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
   function prev() { if (index > 0) { index--; render(); } }
   function shuffle() {
     for (let i = deck.length - 1; i > 0; i--) {
@@ -146,6 +261,12 @@
     if (document.querySelector("dialog[open]")) return;
     const tag = (e.target.tagName || "").toLowerCase();
     if (tag === "input" || tag === "textarea" || tag === "select" || tag === "button") return;
+    if (mode === "quiz" && /^Digit[1-4]$/.test(e.code)) {
+      const b = $("choices").querySelectorAll(".choice")[+e.code.slice(5) - 1];
+      if (b) b.click();
+      return;
+    }
+    if (mode === "quiz" && answered && (e.code === "Enter" || e.code === "ArrowRight")) { e.preventDefault(); next(); return; }
     if (e.code === "Space" || e.code === "Enter") { e.preventDefault(); flip(); }
     else if (e.code === "ArrowRight") next();
     else if (e.code === "ArrowLeft") prev();
@@ -227,7 +348,7 @@
       if (deckName !== current) switchDeck(deckName);
       if (filter !== "all" && filter !== MY) { filter = "all"; updateFilter(); }
       buildDeck();
-      index = deck.length - 1;
+      index = Math.max(0, deck.findIndex((x) => x.word === entry.word && x.thai === entry.thai));
       render();
       if ($("list-dialog").open) renderList();
       toast(`Added “${entry.word}” ✓`);
@@ -373,6 +494,5 @@
 
   // ---------- Start ----------
   updateFilter();
-  buildDeck();
-  render();
+  setMode(mode === "cards" ? "cards" : "quiz");
 })();

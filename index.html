@@ -26,7 +26,18 @@
     <select id="filter" class="filter" aria-label="Choose word set"></select>
   </div>
 
+  <div class="modes" role="tablist" aria-label="Mode">
+    <button class="mode active" data-mode="quiz">🎮 Quiz game</button>
+    <button class="mode" data-mode="cards">🃏 Flashcards</button>
+  </div>
+
   <main>
+    <div id="scorebar" class="scorebar">
+      <span>✅ <b id="s-right">0</b></span>
+      <span>❌ <b id="s-wrong">0</b></span>
+      <span>🔥 Streak <b id="s-streak">0</b></span>
+      <span>🏆 Best <b id="s-best">0</b></span>
+    </div>
     <div class="progress-wrap">
       <span id="counter">0 / 0</span>
       <div class="progress"><div id="progress-bar"></div></div>
@@ -51,6 +62,7 @@
         <div class="face back">
           <span id="back-pos" class="pos"></span>
           <div class="back-inner">
+            <div id="back-result" class="result"></div>
             <div id="back-thai" class="thai"></div>
             <div class="divider"></div>
             <div class="label">Meaning · ความหมาย</div>
@@ -61,13 +73,15 @@
       </div>
     </div>
 
+    <div id="choices" class="choices"></div>
+
     <div id="controls" class="controls">
       <button id="prev" class="btn" aria-label="Previous">‹ Prev</button>
       <button id="shuffle" class="btn btn-soft" aria-label="Shuffle">🔀 Shuffle</button>
       <button id="next" class="btn" aria-label="Next">Next ›</button>
     </div>
 
-    <p class="keys">Space = flip · ← → = previous / next</p>
+    <p class="keys" id="keys">Space = flip · ← → = previous / next</p>
   </main>
 
   <!-- Add / edit word -->
