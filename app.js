@@ -142,7 +142,6 @@
     card.classList.remove("flipped");
     result = { text: "", cls: "result" };
     answered = false;
-    $("choices").innerHTML = "";
     $("next").classList.remove("pulse");
 
     if (total === 0) {
@@ -151,6 +150,7 @@
       $("counter").textContent = "0 / 0";
       $("progress-bar").style.width = "0%";
       controls.querySelectorAll("button").forEach((b) => (b.disabled = true));
+      $("choices").replaceChildren();
       return;
     }
 
@@ -180,8 +180,8 @@
       $("back-result").textContent = result.text;
       $("back-result").className = result.cls;
     };
+    if (mode === "quiz") buildChoices(w); else $("choices").replaceChildren();
     if (delay) setTimeout(fillBack, delay); else fillBack();
-    if (mode === "quiz") buildChoices(w);
 
     $("counter").textContent = `${index + 1} / ${total}`;
     $("progress-bar").style.width = `${((index + 1) / total) * 100}%`;
@@ -223,6 +223,7 @@
     tryPool(samePos.length >= 12 ? samePos : pool);
     if (picks.length < 3) tryPool(allWords());
     const options = shuffleArray([answer, ...picks]);
+    const frag = document.createDocumentFragment();
     options.forEach((txt, i) => {
       const b = document.createElement("button");
       b.className = "choice";
@@ -231,8 +232,9 @@
       b.dataset.correct = txt === answer ? "1" : "";
       b.dataset.token = cardToken;
       b.addEventListener("click", () => choose(b));
-      box.appendChild(b);
+      frag.appendChild(b);
     });
+    box.replaceChildren(frag); // old and new answers swapped at once, so the page height never drops
   }
 
   function choose(btn) {
