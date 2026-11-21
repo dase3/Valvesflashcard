@@ -122,12 +122,23 @@
   const empty = $("empty");
   const controls = $("controls");
 
+  // Each time a new card is shown this number goes up, so timers from an old card do nothing
+  let cardToken = 0;
+  let flipTimer = null;
+  let backReadyAt = 0;      // time when the back of the current card shows the right word
+  let result = { text: "", cls: "result" };
+
   function render() {
+    cardToken++;
+    const myToken = cardToken;
+    clearTimeout(flipTimer);
     const total = deck.length;
     if (index >= total) index = Math.max(0, total - 1);
 
     scene.classList.toggle("chinese", current === "chinese");
+    const wasFlipped = card.classList.contains("flipped");
     card.classList.remove("flipped");
+    result = { text: "", cls: "result" };
     answered = false;
     $("choices").innerHTML = "";
     $("next").classList.remove("pulse");
@@ -151,8 +162,12 @@
     $("front-tag").textContent = tagOf(w) === "Other" ? "" : tagOf(w);
     $("front-word").textContent = w.word || "";
     $("front-pinyin").textContent = w.pinyin || "";
-    // Swap the back after the card turns back over, so the answer isn't revealed early
-    setTimeout(() => {
+    // Swap the back only after the card has fully turned back over (0.6s),
+    // so the next word's answer is never visible while it rotates
+    const delay = wasFlipped ? 650 : 0;
+    backReadyAt = Date.now() + delay;
+    const fillBack = () => {
+      if (myToken !== cardToken) return;
       $("back-pos").textContent = w.pos || "";
       const th = w.thai || "";
       $("back-thai").textContent = th;
@@ -160,8 +175,10 @@
       document.querySelector(".back").scrollTop = 0;
       $("back-meaning").textContent = w.meaning || "";
       $("back-example").textContent = w.example || "";
-      $("back-result").textContent = "";
-    }, 150);
+      $("back-result").textContent = result.text;
+      $("back-result").className = result.cls;
+    };
+    if (delay) setTimeout(fillBack, delay); else fillBack();
     if (mode === "quiz") buildChoices(w);
 
     $("counter").textContent = `${index + 1} / ${total}`;
@@ -235,10 +252,15 @@
       score.wrong++; score.streak = 0;
     }
     updateScore(ok);
-    const r = $("back-result");
-    r.textContent = ok ? "✅ ถูกต้อง! Correct!" : "❌ ยังไม่ถูก — the answer is:";
-    r.className = "result " + (ok ? "ok" : "no");
-    setTimeout(() => card.classList.add("flipped"), ok ? 350 : 650);
+    result = { text: ok ? "✅ ถูกต้อง! Correct!" : "❌ ยังไม่ถูก — the answer is:", cls: "result " + (ok ? "ok" : "no") };
+    if (Date.now() >= backReadyAt) {
+      $("back-result").textContent = result.text;
+      $("back-result").className = result.cls;
+    }
+    const myToken = cardToken;
+    flipTimer = setTimeout(() => {
+      if (myToken === cardToken) card.classList.add("flipped");
+    }, Math.max(ok ? 350 : 650, backReadyAt - Date.now() + 30));
     $("next").disabled = false;
     $("next").classList.add("pulse");
   }
