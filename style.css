@@ -441,3 +441,12 @@ main { overflow-x: hidden; }
 @supports (overflow: clip) {
   main { overflow-x: clip; overflow-y: visible; }
 }
+
+/* While the card is being touched / swiped, nothing else on the page can be used or scrolled */
+body.card-busy { touch-action: none; }
+body.card-busy header, body.card-busy nav, body.card-busy .toolbar, body.card-busy .modes,
+body.card-busy .scorebar, body.card-busy .progress-wrap, body.card-busy .choices,
+body.card-busy .swipe-btns, body.card-busy .controls, body.card-busy .keys {
+  pointer-events: none;
+}
+body.card-busy .swipe-btns, body.card-busy .controls { opacity: 0.55; transition: opacity 0.15s; }

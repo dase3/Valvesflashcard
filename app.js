@@ -520,8 +520,9 @@
     }
   }
 
-  function judge(good) {
+  function judge(good, fromSwipe) {
     if (!deck.length || Date.now() - shownAt < 250) return;
+    if (busy && !fromSwipe) return;
     const w = deck[index];
     if (!answers[index]) {
       answers[index] = { said: good ? "good" : "again" };
@@ -543,6 +544,7 @@
 
   function flyAway(good) {
     const myToken = cardToken;
+    setBusy(true, 900);
     scene.style.transition = "transform 0.3s ease-in, opacity 0.3s";
     scene.style.transform = `translateX(${good ? 140 : -140}%) rotate(${good ? 18 : -18}deg)`;
     scene.style.opacity = "0";
@@ -555,12 +557,22 @@
       setStamps(0);
       next();
       requestAnimationFrame(() => { scene.style.transition = ""; });
+      setBusy(true, 120); // a short moment for the new card to settle, then unlock
     }, 280);
   }
 
   function setStamps(v) {
     $("stamp-good").style.opacity = v > 0 ? Math.min(1, v) : 0;
     $("stamp-again").style.opacity = v < 0 ? Math.min(1, -v) : 0;
+  }
+
+  // While you're touching / swiping the card, the rest of the page is locked
+  let busy = false, busyTimer = null;
+  function setBusy(on, ms) {
+    clearTimeout(busyTimer);
+    if (on && ms) { busyTimer = setTimeout(() => setBusy(false), ms); }
+    busy = on;
+    document.body.classList.toggle("card-busy", on);
   }
 
   // Swipe the card left / right (speaking game).
@@ -573,6 +585,7 @@
     if (glide) { cancelAnimationFrame(glide); glide = null; }
     drag = { x: e.clientX, y: e.clientY, lastY: e.clientY, lastT: performance.now(), vy: 0,
              id: e.pointerId, dx: 0, kind: null, touch: e.pointerType !== "mouse" };
+    setBusy(true, 8000); // safety: unlocks by itself if something goes wrong
   });
   scene.addEventListener("pointermove", (e) => {
     if (!drag || e.pointerId !== drag.id) return;
@@ -601,7 +614,7 @@
     if (!drag || (e && e.pointerId !== drag.id)) return;
     const d = drag;
     drag = null;
-    if (!d.kind) return;
+    if (!d.kind) { setBusy(false); return; }
     swipedAt = Date.now();
     if (d.kind === "scroll") {
       // keep gliding a little after you let go, like normal scrolling
@@ -616,11 +629,12 @@
       return;
     }
     if (Math.abs(d.dx) > 90) {
-      judge(d.dx > 0);
+      judge(d.dx > 0, true);
     } else {
       scene.style.transition = "transform 0.25s";
       scene.style.transform = "";
       setStamps(0);
+      setBusy(true, 260); // unlock once the card has snapped back
     }
   };
   scene.addEventListener("pointerup", endDrag);
@@ -678,6 +692,7 @@
 
   document.addEventListener("keydown", (e) => {
     if (document.querySelector("dialog[open]")) return;
+    if (busy) { e.preventDefault(); return; }
     const tag = (e.target.tagName || "").toLowerCase();
     if (tag === "input" || tag === "textarea" || tag === "select") return;
     if (e.code === "KeyL" || e.code === "KeyP") { speak(false); return; }
@@ -930,11 +945,15 @@
       const el = e.target.closest("button, .card, select, input, textarea, label");
       if (!el || !el.matches("select, input, textarea")) {
         e.preventDefault();
-        if (el && el.isConnected && Date.now() - swipedAt > 400) el.click();
+        if (el && el.isConnected && !busy && Date.now() - swipedAt > 400) el.click();
       }
     }
     lastTap = now;
   }, { passive: false });
+
+  document.addEventListener("click", (e) => {
+    if (busy && !e.target.closest("#scene")) { e.preventDefault(); e.stopPropagation(); }
+  }, true);
 
   // ---------- Reset ----------
   let confirmReset = false;
