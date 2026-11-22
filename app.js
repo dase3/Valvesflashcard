@@ -554,8 +554,7 @@
   }
 
   // Swipe the card left / right (speaking game).
-  // The card handles the touch itself (the page doesn't scroll by itself on the card),
-  // so a slightly diagonal swipe moves only the card. A clearly up/down drag still scrolls the page.
+  // The card handles the touch itself, so the page can't scroll while you're swiping it.
   let drag = null;
   let glide = null;
   scene.addEventListener("pointerdown", (e) => {
@@ -570,8 +569,8 @@
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     if (!drag.kind) {
       if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-      // sideways-ish (up to about 60° from flat) counts as a swipe
-      drag.kind = Math.abs(dx) >= Math.abs(dy) * 0.6 ? "swipe" : "scroll";
+      // any drag that starts on the card is a swipe: the page never scrolls while you swipe
+      drag.kind = "swipe";
       try { scene.setPointerCapture(e.pointerId); } catch (err) {}
       if (drag.kind === "swipe") scene.style.transition = "none";
     }
