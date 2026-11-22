@@ -238,13 +238,14 @@
     $("front-tag").classList.toggle("review", !!w._review);
     $("front-word").textContent = w.word || "";
     $("front-pinyin").textContent = w.pinyin || "";
+    $("front-pos").textContent = w.pos || "";
     // Swap the back only after the card has fully turned back over (0.6s),
     // so the next word's answer is never visible while it rotates
     const delay = wasFlipped ? 650 : 0;
     backReadyAt = Date.now() + delay;
     const fillBack = () => {
       if (myToken !== cardToken) return;
-      $("back-pos").textContent = w.pos || "";
+      $("back-pos").textContent = ""; // part of speech is shown on the front now
       const th = w.thai || "";
       $("back-thai").textContent = th;
       $("back-thai").className = "thai" + (th.length > 70 ? " long" : th.length > 28 ? " medium" : "");

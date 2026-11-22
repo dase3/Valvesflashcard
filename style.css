@@ -450,3 +450,11 @@ body.card-busy .swipe-btns, body.card-busy .controls, body.card-busy .keys {
   pointer-events: none;
 }
 body.card-busy .swipe-btns, body.card-busy .controls { opacity: 0.55; transition: opacity 0.15s; }
+
+/* Part of speech on the front of the card */
+.front-pos {
+  margin-top: 10px; padding: 4px 14px; border-radius: 999px;
+  background: var(--pink-50); border: 1.5px solid var(--pink-200);
+  color: var(--pink-600); font: 700 0.9rem "Quicksand", sans-serif; letter-spacing: 0.3px;
+}
+.front-pos:empty { display: none; }
