@@ -29,31 +29,51 @@
 
   const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
-  // ---------- Card state ----------
+  // ---------- State ----------
+  const MODES = ["quiz", "speak", "cards"];
+  const MISTAKES = "__mistakes";
+  const MY = "My words";
   let current = "english";
-  let deck = [];
+  let deck = [];       // cards in this round (a word can appear again as a review copy)
   let index = 0;
   let filter = "all";
   let mode = "quiz";
-  try { mode = localStorage.getItem("flashcards.mode") || "quiz"; } catch (e) {}
   let answered = false;
-  const score = { right: 0, wrong: 0, streak: 0, best: 0 };
-  try { score.best = +localStorage.getItem("flashcards.best") || 0; } catch (e) {}
-  const MY = "My words";
+  let answers = {};    // results for this round, by card position
+
+  // Scores: points are shared, each game keeps its own counts and streaks
+  const score = {
+    points: 0,
+    quiz: { right: 0, wrong: 0, streak: 0, best: 0 },
+    speak: { good: 0, again: 0, streak: 0, best: 0 },
+  };
 
   // ---------- Saved progress ----------
-  const PROGRESS_KEY = "flashcards.progress.v1";
+  const PROGRESS_KEY = "flashcards.progress.v2";
   let P = {};
   try { P = JSON.parse(localStorage.getItem(PROGRESS_KEY)) || {}; } catch (e) { P = {}; }
   P.filters = P.filters || {};
   P.places = P.places || {};
-  if (P.score) Object.assign(score, P.score, { best: score.best });
+  // mistakes: { quiz: { english: {key: timesWrong}, chinese: {...} }, speak: {...} }
+  P.mistakes = P.mistakes || {};
+  ["quiz", "speak"].forEach((g) => {
+    P.mistakes[g] = P.mistakes[g] || {};
+    ["english", "chinese"].forEach((l) => { P.mistakes[g][l] = P.mistakes[g][l] || {}; });
+  });
+  if (P.score) {
+    score.points = P.score.points || 0;
+    Object.assign(score.quiz, P.score.quiz || {});
+    Object.assign(score.speak, P.score.speak || {});
+  }
   if (P.current === "english" || P.current === "chinese") current = P.current;
-  if (P.mode === "quiz" || P.mode === "cards") mode = P.mode;
+  if (MODES.includes(P.mode)) mode = P.mode;
   filter = P.filters[current] || "all";
+
   const keyOf = (w) => (w.word || "") + "|" + (w.thai || "").slice(0, 30);
   const placeKey = () => `${current}|${filter}|${mode}`;
-  let answers = {}; // quiz answers this round: word key -> { opts, answer, pick }
+  const game = () => (mode === "speak" ? "speak" : "quiz"); // which mistake list applies
+  const mistakes = () => P.mistakes[game()][current];
+
   let saveTimer;
   let ready = false; // don't save until the saved place has been loaded
   function saveProgress() {
@@ -61,40 +81,16 @@
     P.current = current;
     P.mode = mode;
     P.filters[current] = filter;
-    P.places[placeKey()] = { order: deck.map(keyOf), index, answers };
-    P.score = { right: score.right, wrong: score.wrong, streak: score.streak };
+    P.places[placeKey()] = { order: deck.map((w) => (w._review ? "R:" : "") + keyOf(w)), index, answers };
+    P.score = score;
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(P)); } catch (e) { /* storage full or blocked */ }
     }, 150);
   }
+
   const tagOf = (w) => w.tag || (w.builtIn ? "Other" : MY);
-
-  function allWords() {
-    return builtIn[current].concat(custom[current]);
-  }
-
-  function buildDeck() {
-    const list = allWords().filter((w) => filter === "all" || tagOf(w) === filter);
-    const place = P.places[placeKey()];
-    if (place && Array.isArray(place.order)) {
-      // put the words back in the order you were using last time
-      const byKey = new Map();
-      list.forEach((w) => { const k = keyOf(w); if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(w); });
-      deck = [];
-      place.order.forEach((k) => { const arr = byKey.get(k); if (arr && arr.length) deck.push(arr.shift()); });
-      const rest = [];
-      byKey.forEach((arr) => rest.push(...arr));
-      deck.push(...(mode === "quiz" ? shuffleArray(rest) : rest));
-      index = Math.min(place.index || 0, Math.max(0, deck.length - 1));
-      answers = place.answers || {};
-    } else {
-      deck = list;
-      if (mode === "quiz") shuffleArray(deck);
-      index = 0;
-      answers = {};
-    }
-  }
+  const allWords = () => builtIn[current].concat(custom[current]);
 
   function shuffleArray(arr) {
     for (let i = arr.length - 1; i > 0; i--) {
@@ -104,11 +100,48 @@
     return arr;
   }
 
+  function filteredWords() {
+    if (filter === MISTAKES) {
+      const m = mistakes();
+      return allWords().filter((w) => m[keyOf(w)]);
+    }
+    return allWords().filter((w) => filter === "all" || tagOf(w) === filter);
+  }
+
+  function buildDeck() {
+    const list = filteredWords();
+    const place = P.places[placeKey()];
+    if (place && Array.isArray(place.order) && place.order.length) {
+      // put the cards back in the order you were using last time
+      const byKey = new Map();
+      list.forEach((w) => { const k = keyOf(w); if (!byKey.has(k)) byKey.set(k, w); });
+      const used = new Set();
+      deck = [];
+      place.order.forEach((k) => {
+        const review = k.startsWith("R:");
+        const w = byKey.get(review ? k.slice(2) : k);
+        if (!w) return;
+        if (review) deck.push({ ...w, _review: true });
+        else if (!used.has(w)) { deck.push(w); used.add(w); }
+      });
+      const rest = list.filter((w) => !used.has(w));
+      deck.push(...(mode === "cards" ? rest : shuffleArray(rest)));
+      index = Math.min(place.index || 0, Math.max(0, deck.length - 1));
+      answers = place.answers || {};
+    } else {
+      deck = list.slice();
+      if (mode !== "cards") shuffleArray(deck);
+      index = 0;
+      answers = {};
+    }
+  }
+
   function updateFilter() {
     const sel = $("filter");
     const counts = {};
     allWords().forEach((w) => { counts[tagOf(w)] = (counts[tagOf(w)] || 0) + 1; });
-    if (filter !== "all" && !counts[filter]) filter = "all";
+    const nMist = Object.keys(mistakes()).length;
+    if (filter !== "all" && filter !== MISTAKES && !counts[filter]) filter = "all";
     sel.innerHTML = "";
     const add = (value, label) => {
       const o = document.createElement("option");
@@ -117,9 +150,12 @@
     };
     add("all", `All words (${allWords().length})`);
     Object.keys(counts).forEach((t) => add(t, `${t} (${counts[t]})`));
+    if (mode !== "cards") add(MISTAKES, mode === "speak" ? `🔁 Practise again (${nMist})` : `🔁 My mistakes (${nMist})`);
+    else if (filter === MISTAKES) filter = "all";
     sel.value = filter;
   }
 
+  // ---------- Card ----------
   const card = $("card");
   const scene = $("scene");
   const empty = $("empty");
@@ -128,9 +164,8 @@
   // Each time a new card is shown this number goes up, so timers from an old card do nothing
   let cardToken = 0;
   let flipTimer = null;
-  let backReadyAt = 0;      // time when the back of the current card shows the right word
+  let backReadyAt = 0;
   let result = { text: "", cls: "result" };
-
   let shownAt = 0;
 
   // Keep the page where it is when the card changes (iPhone Safari sometimes jumps to the top)
@@ -150,6 +185,7 @@
     cardToken++;
     const myToken = cardToken;
     clearTimeout(flipTimer);
+    if (window.speechSynthesis) speechSynthesis.cancel();
     const total = deck.length;
     if (index >= total) index = Math.max(0, total - 1);
 
@@ -159,14 +195,23 @@
     result = { text: "", cls: "result" };
     answered = false;
     $("next").classList.remove("pulse");
+    $("speak-result").textContent = "";
+    $("speak-result").className = "speak-result";
 
     if (total === 0) {
       scene.classList.add("hidden");
       empty.classList.remove("hidden");
+      const mist = filter === MISTAKES;
+      $("empty-title").textContent = mist ? "Nothing to review 🎉" : "No words yet";
+      $("empty-text").innerHTML = mist
+        ? "ไม่มีคำที่ต้องทบทวน — you've fixed all your mistakes!<br />Pick another word set to keep playing."
+        : "ยังไม่มีคำศัพท์ในชุดนี้<br />Click <strong>＋ Add word</strong> to make your first card.";
       $("counter").textContent = "0 / 0";
       $("progress-bar").style.width = "0%";
       controls.querySelectorAll("button").forEach((b) => (b.disabled = true));
       $("choices").replaceChildren();
+      $("swipe-btns").querySelectorAll("button").forEach((b) => (b.disabled = true));
+      updateScore();
       return;
     }
 
@@ -174,10 +219,13 @@
     empty.classList.add("hidden");
     $("shuffle").disabled = total < 2;
     $("prev").disabled = index === 0;
-    $("next").disabled = mode === "quiz" ? true : index === total - 1;
+    $("next").disabled = mode === "quiz" ? true : false;
+    $("swipe-btns").querySelectorAll("button").forEach((b) => (b.disabled = false));
 
     const w = deck[index];
-    $("front-tag").textContent = tagOf(w) === "Other" ? "" : tagOf(w);
+    const tag = w._review ? "🔁 Review" : tagOf(w) === "Other" ? "" : tagOf(w);
+    $("front-tag").textContent = tag;
+    $("front-tag").classList.toggle("review", !!w._review);
     $("front-word").textContent = w.word || "";
     $("front-pinyin").textContent = w.pinyin || "";
     // Swap the back only after the card has fully turned back over (0.6s),
@@ -198,22 +246,96 @@
       $("back-result").className = result.cls;
     };
     if (mode === "quiz") buildChoices(w); else $("choices").replaceChildren();
+    if (mode === "speak") showSpeakState();
     if (delay) setTimeout(fillBack, delay); else fillBack();
 
     $("counter").textContent = `${index + 1} / ${total}`;
     $("progress-bar").style.width = `${((index + 1) / total) * 100}%`;
-    saveProgress();
+    updateScore();
     if (ready) keepScroll(scrollY0);
   }
 
+  let swipedAt = 0;
   function flip() {
     if (!deck.length) return;
+    if (Date.now() - swipedAt < 400) return; // the tap was the end of a swipe
     if (mode === "quiz" && !answered) return; // pick an answer first
     card.classList.toggle("flipped");
   }
+
+  function newRound() {
+    deck = filteredWords().slice();
+    if (mode !== "cards") shuffleArray(deck);
+    answers = {};
+    index = 0;
+    render();
+  }
+
   function next() {
     if (index < deck.length - 1) { index++; render(); }
-    else if (mode === "quiz" && deck.length > 1) { shuffleArray(deck); answers = {}; index = 0; render(); toast("Round complete! 🎉 Shuffled for a new round"); }
+    else if (mode !== "cards" && deck.length > 0) {
+      const fixedAll = filter === MISTAKES && filteredWords().length === 0;
+      newRound();
+      toast(fixedAll ? "All mistakes fixed! 🎉" : "Round complete! 🎉 Shuffled for a new round");
+    }
+  }
+  function prev() { if (index > 0) { index--; render(); } }
+
+  // ---------- Mistakes come back later ----------
+  function addMistake(w) {
+    const m = mistakes();
+    const k = keyOf(w);
+    m[k] = (m[k] || 0) + 1;
+    // put a review copy 3–6 cards later, unless one is already waiting
+    const waiting = deck.some((c, i) => i > index && c._review && keyOf(c) === k);
+    if (!waiting) {
+      const gap = 3 + Math.floor(Math.random() * 4);
+      const at = Math.min(deck.length, index + 1 + gap);
+      deck.splice(at, 0, { ...w, _review: true });
+      // cards after the insert point moved one place later, so move their saved results too
+      const moved = {};
+      Object.keys(answers).forEach((k) => { const n = +k; moved[n >= at ? n + 1 : n] = answers[k]; });
+      answers = moved;
+    }
+    updateFilterCount();
+  }
+  function clearMistake(w) {
+    const m = mistakes();
+    if (m[keyOf(w)]) { delete m[keyOf(w)]; updateFilterCount(); return true; }
+    return false;
+  }
+  function updateFilterCount() {
+    const opt = [...$("filter").options].find((o) => o.value === MISTAKES);
+    if (opt) {
+      const n = Object.keys(mistakes()).length;
+      opt.textContent = mode === "speak" ? `🔁 Practise again (${n})` : `🔁 My mistakes (${n})`;
+    }
+  }
+
+  // ---------- Points ----------
+  function gain(n, label) {
+    if (n <= 0) return;
+    score.points += n;
+    const g = $("s-gain");
+    g.textContent = `+${n}${label ? " " + label : ""}`;
+    g.classList.remove("show"); void g.offsetWidth; g.classList.add("show");
+  }
+
+  function updateScore() {
+    const q = score.quiz, s = score.speak;
+    $("s-points").textContent = score.points;
+    const tot = q.right + q.wrong;
+    $("s-acc").textContent = tot ? Math.round((q.right / tot) * 100) + "%" : "–";
+    $("s-good").textContent = s.good;
+    const st = mode === "speak" ? s : q;
+    $("s-streak").textContent = st.streak;
+    $("s-best").textContent = st.best;
+    $("s-review").textContent = Object.keys(mistakes()).length;
+    saveProgress();
+  }
+  function bump() {
+    const bar = $("scorebar");
+    bar.classList.remove("bump"); void bar.offsetWidth; bar.classList.add("bump");
   }
 
   // ---------- Quiz game ----------
@@ -223,7 +345,7 @@
     return s;
   };
 
-  let currentChoice = null; // options shown for the current card
+  let currentChoice = null;
 
   function makeButtons(options, answer) {
     const frag = document.createDocumentFragment();
@@ -234,10 +356,11 @@
       b.appendChild(document.createTextNode(txt));
       b.dataset.correct = txt === answer ? "1" : "";
       b.dataset.token = cardToken;
+      b.dataset.text = txt;
       b.addEventListener("click", () => choose(b));
       frag.appendChild(b);
     });
-    $("choices").replaceChildren(frag); // old and new answers swapped at once, so the page height never drops
+    $("choices").replaceChildren(frag); // swapped at once, so the page height never drops
   }
 
   function markChoices(pickedBtn) {
@@ -249,21 +372,23 @@
     });
   }
 
-  const resultFor = (ok) => ({
-    text: ok ? "✅ ถูกต้อง! Correct!" : "❌ ยังไม่ถูก — the answer is:",
+  const resultFor = (ok, w) => ({
+    text: ok
+      ? (w && w._review ? "✅ Fixed it! แก้ได้แล้ว" : "✅ ถูกต้อง! Correct!")
+      : "❌ ยังไม่ถูก — it will come back soon. The answer is:",
     cls: "result " + (ok ? "ok" : "no"),
   });
 
   function buildChoices(w) {
-    const rec = answers[keyOf(w)];
+    const rec = answers[index];
     if (rec && Array.isArray(rec.opts)) {
       // already answered this round: show it locked, exactly as it was
       currentChoice = rec;
       makeButtons(rec.opts, rec.answer);
-      const picked = [...$("choices").querySelectorAll(".choice")].find((b) => b.textContent.slice(1) === rec.pick);
+      const picked = [...$("choices").querySelectorAll(".choice")].find((b) => b.dataset.text === rec.pick);
       markChoices(picked);
       answered = true;
-      result = resultFor(rec.pick === rec.answer);
+      result = resultFor(rec.pick === rec.answer, w);
       $("next").disabled = false;
       const myToken = cardToken;
       flipTimer = setTimeout(() => {
@@ -278,7 +403,7 @@
       for (const o of shuffleArray(pool.slice())) {
         if (picks.length >= 3) break;
         const s = short(o.thai);
-        if (o === w || !s || used.has(s)) continue;
+        if (keyOf(o) === keyOf(w) || !s || used.has(s)) continue;
         used.add(s); picks.push(s);
       }
     };
@@ -297,23 +422,26 @@
     if (!btn.isConnected || +btn.dataset.token !== cardToken) return;
     if (Date.now() - shownAt < 250) return; // too soon after the card appeared: probably a stray tap
     answered = true;
+    const w = deck[index];
     const ok = btn.dataset.correct === "1";
     markChoices(btn);
-    // remember this answer so going back can't score it again
-    if (currentChoice && deck[index]) {
-      answers[keyOf(deck[index])] = { opts: currentChoice.opts, answer: currentChoice.answer, pick: btn.textContent.slice(1) };
-    }
+    answers[index] = { opts: currentChoice.opts, answer: currentChoice.answer, pick: btn.dataset.text };
+    const q = score.quiz;
     if (ok) {
-      score.right++; score.streak++;
-      if (score.streak > score.best) {
-        score.best = score.streak;
-        try { localStorage.setItem("flashcards.best", score.best); } catch (e) {}
-      }
+      q.right++; q.streak++;
+      if (q.streak > q.best) q.best = q.streak;
+      const fixed = clearMistake(w) || w._review;
+      // 10 points, +1 for every answer in a row after the first (up to +10); fixing a mistake = 5
+      const bonus = Math.min(q.streak - 1, 10);
+      gain(fixed ? 5 + bonus : 10 + bonus, q.streak >= 3 ? `🔥${q.streak}` : "");
+      bump();
     } else {
-      score.wrong++; score.streak = 0;
+      q.wrong++; q.streak = 0;
+      addMistake(w);
     }
-    updateScore(ok);
-    result = resultFor(ok);
+    updateScore();
+    $("counter").textContent = `${index + 1} / ${deck.length}`;
+    result = resultFor(ok, w);
     if (Date.now() >= backReadyAt) {
       $("back-result").textContent = result.text;
       $("back-result").className = result.cls;
@@ -326,37 +454,167 @@
     $("next").classList.add("pulse");
   }
 
-  function updateScore(ok) {
-    $("s-right").textContent = score.right;
-    $("s-wrong").textContent = score.wrong;
-    $("s-streak").textContent = score.streak;
-    $("s-best").textContent = score.best;
-    saveProgress();
-    const bar = $("scorebar");
-    if (ok) { bar.classList.remove("bump"); void bar.offsetWidth; bar.classList.add("bump"); }
+  // ---------- Speaking game ----------
+  let voices = [];
+  function loadVoices() { if (window.speechSynthesis) voices = speechSynthesis.getVoices(); }
+  loadVoices();
+  if (window.speechSynthesis && "onvoiceschanged" in speechSynthesis) speechSynthesis.onvoiceschanged = loadVoices;
+
+  function pickVoice(lang) {
+    const pre = lang.slice(0, 2).toLowerCase();
+    const list = voices.filter((v) => (v.lang || "").toLowerCase().replace("_", "-").startsWith(pre));
+    if (lang === "zh-CN") {
+      return list.find((v) => /zh[-_]CN/i.test(v.lang)) || list.find((v) => !/HK|TW/i.test(v.lang)) || list[0];
+    }
+    return list.find((v) => /en[-_]US/i.test(v.lang)) || list[0];
   }
 
+  function speak(slow) {
+    const w = deck[index];
+    if (!w) return;
+    if (!window.speechSynthesis || typeof SpeechSynthesisUtterance === "undefined") {
+      toast("Sorry, this browser can't play pronunciation");
+      return;
+    }
+    const lang = current === "chinese" ? "zh-CN" : "en-US";
+    let text = (w.word || "").replace(/\s*\.\.\.\s*/g, " ").replace(/\(.*?\)/g, "").trim();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = lang;
+    const v = pickVoice(lang);
+    if (v) u.voice = v;
+    else if (voices.length) toast(current === "chinese" ? "No Chinese voice on this device" : "No English voice on this device");
+    u.rate = slow ? 0.55 : current === "chinese" ? 0.8 : 0.9;
+    const btn = $("listen");
+    u.onstart = () => btn.classList.add("playing");
+    u.onend = u.onerror = () => btn.classList.remove("playing");
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  }
+  let lastListen = 0;
+  $("listen").addEventListener("click", (e) => {
+    e.stopPropagation();
+    // tapping 🔊 twice quickly plays it slowly
+    const now = Date.now();
+    speak(now - lastListen < 1500);
+    lastListen = now;
+  });
+  ["pointerdown", "touchstart", "mousedown"].forEach((ev) => $("listen").addEventListener(ev, (e) => e.stopPropagation()));
+
+  function showSpeakState() {
+    const rec = answers[index];
+    const el = $("speak-result");
+    if (rec && rec.said) {
+      answered = true;
+      el.textContent = rec.said === "good" ? "👍 You said this one well" : "🔁 Marked to practise again";
+      el.className = "speak-result " + (rec.said === "good" ? "ok" : "no");
+    }
+  }
+
+  function judge(good) {
+    if (!deck.length || Date.now() - shownAt < 250) return;
+    const w = deck[index];
+    if (!answers[index]) {
+      answers[index] = { said: good ? "good" : "again" };
+      const s = score.speak;
+      if (good) {
+        s.good++; s.streak++;
+        if (s.streak > s.best) s.best = s.streak;
+        const fixed = clearMistake(w) || w._review;
+        gain(fixed ? 3 : 5, fixed ? "fixed" : "");
+        bump();
+      } else {
+        s.again++; s.streak = 0;
+        addMistake(w);
+      }
+      updateScore();
+    }
+    flyAway(good);
+  }
+
+  function flyAway(good) {
+    const myToken = cardToken;
+    scene.style.transition = "transform 0.3s ease-in, opacity 0.3s";
+    scene.style.transform = `translateX(${good ? 140 : -140}%) rotate(${good ? 18 : -18}deg)`;
+    scene.style.opacity = "0";
+    setStamps(good ? 1 : -1);
+    setTimeout(() => {
+      if (myToken !== cardToken) return;
+      scene.style.transition = "none";
+      scene.style.transform = "";
+      scene.style.opacity = "";
+      setStamps(0);
+      next();
+      requestAnimationFrame(() => { scene.style.transition = ""; });
+    }, 280);
+  }
+
+  function setStamps(v) {
+    $("stamp-good").style.opacity = v > 0 ? Math.min(1, v) : 0;
+    $("stamp-again").style.opacity = v < 0 ? Math.min(1, -v) : 0;
+  }
+
+  // Swipe the card left / right (speaking game)
+  let drag = null;
+  scene.addEventListener("pointerdown", (e) => {
+    if (mode !== "speak" || !deck.length) return;
+    if (e.target.closest("button")) return;
+    drag = { x: e.clientX, y: e.clientY, id: e.pointerId, dx: 0, moving: false };
+  });
+  scene.addEventListener("pointermove", (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!drag.moving) {
+      if (Math.abs(dx) < 10) return;
+      if (Math.abs(dy) > Math.abs(dx)) { drag = null; return; } // scrolling, not swiping
+      drag.moving = true;
+      try { scene.setPointerCapture(e.pointerId); } catch (err) {}
+      scene.style.transition = "none";
+    }
+    drag.dx = dx;
+    scene.style.transform = `translateX(${dx}px) rotate(${dx / 18}deg)`;
+    setStamps(dx / 110);
+  });
+  const endDrag = (e) => {
+    if (!drag || (e && e.pointerId !== drag.id)) return;
+    const d = drag;
+    drag = null;
+    if (!d.moving) return;
+    swipedAt = Date.now();
+    if (Math.abs(d.dx) > 90) {
+      judge(d.dx > 0);
+    } else {
+      scene.style.transition = "transform 0.25s";
+      scene.style.transform = "";
+      setStamps(0);
+    }
+  };
+  scene.addEventListener("pointerup", endDrag);
+  scene.addEventListener("pointercancel", endDrag);
+  $("good-btn").addEventListener("click", () => judge(true));
+  $("again-btn").addEventListener("click", () => judge(false));
+
+  // ---------- Modes ----------
   function setMode(m) {
     mode = m;
-    try { localStorage.setItem("flashcards.mode", m); } catch (e) {}
     document.querySelectorAll(".mode").forEach((b) => b.classList.toggle("active", b.dataset.mode === m));
     document.body.classList.toggle("quiz", m === "quiz");
-    $("scorebar").classList.toggle("hidden", m !== "quiz");
-    $("choices").classList.toggle("hidden", m !== "quiz");
+    document.body.classList.toggle("speak", m === "speak");
+    document.body.classList.toggle("cards", m === "cards");
+    filter = P.filters[current] || "all";
+    updateFilter();
     $("keys").textContent = m === "quiz"
-      ? "1–4 = choose answer · Enter / → = next word"
-      : "Space = flip · ← → = previous / next";
-    index = 0;
+      ? "1–4 = choose answer · Enter / → = next · L = listen"
+      : m === "speak"
+        ? "Say the word, tap 🔊 to check · swipe → or press → if good, swipe ← or press ← to practise again"
+        : "Space = flip · ← → = previous / next · L = listen";
     buildDeck();
     render();
   }
   document.querySelectorAll(".mode").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
-  function prev() { if (index > 0) { index--; render(); } }
+
   function shuffle() {
-    for (let i = deck.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [deck[i], deck[j]] = [deck[j], deck[i]];
-    }
+    shuffleArray(deck);
+    answers = {};
     index = 0;
     render();
   }
@@ -364,7 +622,6 @@
   function switchDeck(name) {
     current = name;
     document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.deck === name));
-    index = 0;
     filter = P.filters[name] || "all";
     updateFilter();
     buildDeck();
@@ -374,7 +631,6 @@
   $("filter").addEventListener("change", (e) => {
     filter = e.target.value;
     P.filters[current] = filter;
-    index = 0;
     buildDeck();
     render();
   });
@@ -388,11 +644,17 @@
   document.addEventListener("keydown", (e) => {
     if (document.querySelector("dialog[open]")) return;
     const tag = (e.target.tagName || "").toLowerCase();
-    if (tag === "input" || tag === "textarea" || tag === "select" || tag === "button") return;
+    if (tag === "input" || tag === "textarea" || tag === "select") return;
+    if (e.code === "KeyL" || e.code === "KeyP") { speak(false); return; }
+    if (tag === "button" && (e.code === "Space" || e.code === "Enter")) return;
     if (mode === "quiz" && /^Digit[1-4]$/.test(e.code)) {
       const b = $("choices").querySelectorAll(".choice")[+e.code.slice(5) - 1];
       if (b) b.click();
       return;
+    }
+    if (mode === "speak") {
+      if (e.code === "ArrowRight") { judge(true); return; }
+      if (e.code === "ArrowLeft") { judge(false); return; }
     }
     if (mode === "quiz" && answered && (e.code === "Enter" || e.code === "ArrowRight")) { e.preventDefault(); next(); return; }
     if (e.code === "Space" || e.code === "Enter") { e.preventDefault(); flip(); }
@@ -461,12 +723,12 @@
       custom[deckName].push({ ...entry, id: newId() });
     }
     if (!saveCustom()) return;
-    updateFilter();
 
     const wasEditing = !!editing;
     addDialog.close();
 
     if (wasEditing) {
+      updateFilter();
       buildDeck();
       render();
       renderList();
@@ -474,9 +736,12 @@
     } else {
       // Jump to the new card
       if (deckName !== current) switchDeck(deckName);
-      if (filter !== "all" && filter !== MY) { filter = "all"; updateFilter(); }
+      if (filter !== "all" && filter !== MY) { filter = "all"; }
+      updateFilter();
       buildDeck();
-      index = Math.max(0, deck.findIndex((x) => x.word === entry.word && x.thai === entry.thai));
+      let i = deck.findIndex((x) => x.word === entry.word && x.thai === entry.thai);
+      if (i === -1) { deck.push(custom[deckName][custom[deckName].length - 1]); i = deck.length - 1; }
+      index = i;
       render();
       if ($("list-dialog").open) renderList();
       toast(`Added “${entry.word}” ✓`);
@@ -494,7 +759,7 @@
     ul.innerHTML = "";
     $("list-title").textContent = current === "chinese" ? "中文 word list" : "English word list";
 
-    const all = allWords().filter((w) => filter === "all" || tagOf(w) === filter);
+    const all = filteredWords();
     if (all.length === 0) {
       const li = document.createElement("li");
       li.className = "w-empty";
@@ -630,13 +895,14 @@
       const el = e.target.closest("button, .card, select, input, textarea, label");
       if (!el || !el.matches("select, input, textarea")) {
         e.preventDefault();
-        if (el && el.isConnected) el.click();
+        if (el && el.isConnected && Date.now() - swipedAt > 400) el.click();
       }
     }
     lastTap = now;
   }, { passive: false });
 
-  // reset the score
+  // ---------- Reset ----------
+  let confirmReset = false;
   $("reset-score").addEventListener("click", () => {
     if (!confirmReset) {
       confirmReset = true;
@@ -646,24 +912,19 @@
     }
     confirmReset = false;
     $("reset-score").textContent = "↺ Reset";
-    score.right = score.wrong = score.streak = score.best = 0;
-    try { localStorage.setItem("flashcards.best", 0); } catch (e) {}
-    // also unlock every answered question (in all languages / word sets) and start a fresh round
-    answers = {};
-    Object.values(P.places).forEach((pl) => { if (pl) pl.answers = {}; });
-    if (mode === "quiz") shuffleArray(deck);
-    index = 0;
-    updateScore(false);
-    render();
-    toast("Score and answers reset — new round!");
+    score.points = 0;
+    score.quiz = { right: 0, wrong: 0, streak: 0, best: 0 };
+    score.speak = { good: 0, again: 0, streak: 0, best: 0 };
+    // unlock every answered card and remove waiting review copies, then start a fresh round
+    Object.values(P.places).forEach((pl) => { if (pl) { pl.answers = {}; pl.order = []; } });
+    newRound();
+    toast("Score reset — new round! (your mistake list is kept)");
   });
-  let confirmReset = false;
 
   // ---------- Start ----------
+  try { localStorage.removeItem("flashcards.progress.v1"); } catch (e) {}
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.deck === current));
-  updateScore(false);
-  updateFilter();
-  setMode(mode === "cards" ? "cards" : "quiz");
+  setMode(mode);
   ready = true;
   saveProgress();
 })();

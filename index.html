@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Noto+Sans+Thai:wght@400;600&family=Noto+Sans+SC:wght@500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=11" />
+  <link rel="stylesheet" href="style.css?v=12" />
 </head>
 <body>
   <header>
@@ -27,16 +27,19 @@
   </div>
 
   <div class="modes" role="tablist" aria-label="Mode">
-    <button class="mode active" data-mode="quiz">🎮 Quiz game</button>
+    <button class="mode active" data-mode="quiz">🎮 Quiz</button>
+    <button class="mode" data-mode="speak">🗣️ Speaking</button>
     <button class="mode" data-mode="cards">🃏 Flashcards</button>
   </div>
 
   <main>
     <div id="scorebar" class="scorebar">
-      <span>✅ <b id="s-right">0</b></span>
-      <span>❌ <b id="s-wrong">0</b></span>
-      <span>🔥 Streak <b id="s-streak">0</b></span>
-      <span>🏆 Best <b id="s-best">0</b></span>
+      <span class="sb points">⭐ <b id="s-points">0</b> pts<span id="s-gain" class="gain"></span></span>
+      <span class="sb quiz-only" title="Accuracy">🎯 <b id="s-acc">–</b></span>
+      <span class="sb speak-only" title="Said well">👍 <b id="s-good">0</b></span>
+      <span class="sb" title="In a row">🔥 <b id="s-streak">0</b></span>
+      <span class="sb" title="Best streak">🏆 <b id="s-best">0</b></span>
+      <span class="sb" title="Words to review">🔁 <b id="s-review">0</b> to review</span>
       <button type="button" id="reset-score" class="reset">↺ Reset</button>
     </div>
     <div class="progress-wrap">
@@ -47,8 +50,8 @@
     <!-- Empty state (shown when a deck has no words yet) -->
     <div id="empty" class="empty hidden">
       <div class="empty-icon">🎀</div>
-      <h2>No words yet</h2>
-      <p>ยังไม่มีคำศัพท์ในชุดนี้<br />Click <strong>＋ Add word</strong> to make your first card.</p>
+      <h2 id="empty-title">No words yet</h2>
+      <p id="empty-text">ยังไม่มีคำศัพท์ในชุดนี้<br />Click <strong>＋ Add word</strong> to make your first card.</p>
     </div>
 
     <!-- Flash card -->
@@ -59,6 +62,8 @@
           <span class="hint">tap to flip</span>
           <div id="front-word" class="word"></div>
           <div id="front-pinyin" class="pinyin"></div>
+          <button type="button" id="listen" class="listen" aria-label="Listen to pronunciation">🔊</button>
+          <div id="speak-result" class="speak-result"></div>
         </div>
         <div class="face back">
           <span id="back-pos" class="pos"></span>
@@ -72,9 +77,16 @@
           </div>
         </div>
       </div>
+      <div id="stamp-good" class="stamp good">GOOD 👍</div>
+      <div id="stamp-again" class="stamp again">AGAIN 🔁</div>
     </div>
 
     <div id="choices" class="choices"></div>
+
+    <div id="swipe-btns" class="swipe-btns">
+      <button type="button" id="again-btn" class="swipe-btn again">👈 Practise again</button>
+      <button type="button" id="good-btn" class="swipe-btn good">Good 👉</button>
+    </div>
 
     <div id="controls" class="controls">
       <button id="prev" class="btn" aria-label="Previous">‹ Prev</button>
@@ -158,7 +170,7 @@
 
   <div id="toast" class="toast"></div>
 
-  <script src="words.js?v=11"></script>
-  <script src="app.js?v=11"></script>
+  <script src="words.js?v=12"></script>
+  <script src="app.js?v=12"></script>
 </body>
 </html>
