@@ -567,13 +567,21 @@
   }
 
   // While you're touching / swiping the card, the rest of the page is locked
-  let busy = false, busyTimer = null;
+  let busy = false, busyTimer = null, lockY = 0;
   function setBusy(on, ms) {
     clearTimeout(busyTimer);
     if (on && ms) { busyTimer = setTimeout(() => setBusy(false), ms); }
+    if (on && !busy) lockY = window.scrollY; // remember where the page is
     busy = on;
     document.body.classList.toggle("card-busy", on);
   }
+  // Scroll lock: while busy, block every scroll gesture and hold the page where it was
+  const blockScroll = (e) => { if (busy) e.preventDefault(); };
+  document.addEventListener("touchmove", blockScroll, { passive: false });
+  document.addEventListener("wheel", blockScroll, { passive: false });
+  window.addEventListener("scroll", () => {
+    if (busy && Math.abs(window.scrollY - lockY) > 1) window.scrollTo(0, lockY);
+  }, { passive: true });
 
   // Swipe the card left / right (speaking game).
   // The card handles the touch itself, so the page can't scroll while you're swiping it.
