@@ -553,33 +553,59 @@
     $("stamp-again").style.opacity = v < 0 ? Math.min(1, -v) : 0;
   }
 
-  // Swipe the card left / right (speaking game)
+  // Swipe the card left / right (speaking game).
+  // The card handles the touch itself (the page doesn't scroll by itself on the card),
+  // so a slightly diagonal swipe moves only the card. A clearly up/down drag still scrolls the page.
   let drag = null;
+  let glide = null;
   scene.addEventListener("pointerdown", (e) => {
     if (mode !== "speak" || !deck.length) return;
     if (e.target.closest("button")) return;
-    drag = { x: e.clientX, y: e.clientY, id: e.pointerId, dx: 0, moving: false };
+    if (glide) { cancelAnimationFrame(glide); glide = null; }
+    drag = { x: e.clientX, y: e.clientY, lastY: e.clientY, lastT: performance.now(), vy: 0,
+             id: e.pointerId, dx: 0, kind: null, touch: e.pointerType !== "mouse" };
   });
   scene.addEventListener("pointermove", (e) => {
     if (!drag || e.pointerId !== drag.id) return;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-    if (!drag.moving) {
-      if (Math.abs(dx) < 10) return;
-      if (Math.abs(dy) > Math.abs(dx)) { drag = null; return; } // scrolling, not swiping
-      drag.moving = true;
+    if (!drag.kind) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      // sideways-ish (up to about 60° from flat) counts as a swipe
+      drag.kind = Math.abs(dx) >= Math.abs(dy) * 0.6 ? "swipe" : "scroll";
       try { scene.setPointerCapture(e.pointerId); } catch (err) {}
-      scene.style.transition = "none";
+      if (drag.kind === "swipe") scene.style.transition = "none";
     }
-    drag.dx = dx;
-    scene.style.transform = `translateX(${dx}px) rotate(${dx / 18}deg)`;
-    setStamps(dx / 110);
+    if (drag.kind === "swipe") {
+      drag.dx = dx;
+      scene.style.transform = `translateX(${dx}px) rotate(${dx / 18}deg)`;
+      setStamps(dx / 110);
+    } else if (drag.touch) {
+      // scroll the page ourselves
+      const now = performance.now();
+      const step = drag.lastY - e.clientY;
+      window.scrollBy(0, step);
+      drag.vy = step / Math.max(1, now - drag.lastT);
+      drag.lastY = e.clientY; drag.lastT = now;
+    }
   });
   const endDrag = (e) => {
     if (!drag || (e && e.pointerId !== drag.id)) return;
     const d = drag;
     drag = null;
-    if (!d.moving) return;
+    if (!d.kind) return;
     swipedAt = Date.now();
+    if (d.kind === "scroll") {
+      // keep gliding a little after you let go, like normal scrolling
+      let v = d.vy * 16;
+      const step = () => {
+        if (Math.abs(v) < 0.5) { glide = null; return; }
+        window.scrollBy(0, v);
+        v *= 0.94;
+        glide = requestAnimationFrame(step);
+      };
+      glide = requestAnimationFrame(step);
+      return;
+    }
     if (Math.abs(d.dx) > 90) {
       judge(d.dx > 0);
     } else {
