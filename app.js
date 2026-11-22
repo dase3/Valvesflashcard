@@ -169,8 +169,18 @@
   let shownAt = 0;
 
   // Keep the page where it is when the card changes (iPhone Safari sometimes jumps to the top)
+  let userScrollAt = 0; // the last time you touched / scrolled the page yourself
+  ["touchstart", "wheel", "keydown"].forEach((ev) =>
+    window.addEventListener(ev, (e) => {
+      if (ev === "touchstart" && e.target.closest && e.target.closest("#scene, button")) return;
+      userScrollAt = Date.now();
+    }, { passive: true }));
   function keepScroll(y) {
-    const fix = () => { if (Math.abs(window.scrollY - y) > 20) window.scrollTo(0, y); };
+    const start = Date.now();
+    const fix = () => {
+      if (userScrollAt > start) return; // you're scrolling yourself: leave it alone
+      if (Math.abs(window.scrollY - y) > 20) window.scrollTo(0, y);
+    };
     fix();
     requestAnimationFrame(() => { fix(); requestAnimationFrame(fix); });
     [60, 150, 300, 500].forEach((t) => setTimeout(fix, t));

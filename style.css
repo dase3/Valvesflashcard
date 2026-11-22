@@ -435,3 +435,9 @@ body.speak .scene { aspect-ratio: 16 / 11; }
   .scorebar { gap: 6px 12px; font-size: 0.88rem; }
 }
 body.speak .hint { display: none; }
+
+/* Keep a card flying off the side from making the page wider (that made Safari shift and scroll the page) */
+main { overflow-x: hidden; }
+@supports (overflow: clip) {
+  main { overflow-x: clip; overflow-y: visible; }
+}
